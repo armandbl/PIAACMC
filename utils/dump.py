@@ -66,3 +66,108 @@ F_number=69
 SR=wl*F_number
 expected_max_radius_norm=0.75
 expected_heights=np.array([1.26196831, 0.94074998, 0.77836148, 0.6366583 , 0.7739299 , 3.19782967, 0.85539274, 0.79005693, 0.88346143, 0.87813155]) #microns
+
+
+def make_rings(self):
+        '''
+
+        '''
+
+        masks_in=dict()
+        masks_out=dict()
+
+        for i in range(len(self.radii)-1,-1,-1):
+            if i==0:
+                ca1=make_circular_aperture(self.radii[i]*2)
+                supersampled_ca1=evaluate_supersampled(ca1,self.cor_grid,self.supersample_factor)
+                masks_in[i]=1-supersampled_ca1
+            else:
+                ca1=make_circular_aperture(self.radii[i]*2)
+                ca2=make_circular_aperture(self.radii[i-1]*2)
+                supersampled_ca1=evaluate_supersampled(ca1,self.cor_grid,self.supersample_factor)
+                supersampled_ca2=evaluate_supersampled(ca2,self.cor_grid,self.supersample_factor)
+                masks_in[i]=1-supersampled_ca1+supersampled_ca2
+            masks_out[i]=1-masks_in[i]
+
+        return masks_out
+
+
+def make_FPM_w_rings(self,thicknesses):
+    '''
+    Input thicknesses needs to be given in MICRONS.
+    Returns FPM apodizer, where the surface sag is in METERS.
+    '''
+
+    rings=self.make_rings()
+
+    for i in range(len(self.radii)):
+        if i==0:
+            FPM=rings[0]*thicknesses[0]*1e-6
+        else:
+            FPM+=rings[i]*thicknesses[i]*1e-6
+
+    FPM_apodizer=SurfaceApodizer(FPM,self.n_mask)
+
+    return FPM_apodizer
+
+
+# --- FPM ring design: the attributes the coworker's class would have held ---
+# CONFIRM: radii (evenly spaced to 0.75 lambda/D) and n_mask (FPM material)
+radii = np.linspace(expected_max_radius_norm / n_rings, expected_max_radius_norm, n_rings) * SR  # metres
+cor_grid = hp.make_focal_grid(q=100, num_airy=2, spatial_resolution=SR) 
+n_mask = hp.get_refractive_index('SILICA')
+
+def make_rings(radii, cor_grid, supersample_factor):
+        '''
+
+        '''
+
+        masks_in=dict()
+        masks_out=dict()
+
+        for i in range(len(radii)-1,-1,-1):
+            if i==0:
+                ca1=make_circular_aperture(radii[i]*2)
+                supersampled_ca1=evaluate_supersampled(ca1,cor_grid,supersample_factor)
+                masks_in[i]=1-supersampled_ca1
+            else:
+                ca1=make_circular_aperture(radii[i]*2)
+                ca2=make_circular_aperture(radii[i-1]*2)
+                supersampled_ca1=evaluate_supersampled(ca1,cor_grid,supersample_factor)
+                supersampled_ca2=evaluate_supersampled(ca2,cor_grid,supersample_factor)
+                masks_in[i]=1-supersampled_ca1+supersampled_ca2
+            masks_out[i]=1-masks_in[i]
+
+        return masks_out
+
+def make_FPM_w_rings(radii, cor_grid, supersample_factor, n_mask, thicknesses):
+    '''
+    Input thicknesses needs to be given in MICRONS.
+    Returns FPM apodizer, where the surface sag is in METERS.
+    '''
+
+    rings=make_rings(radii, cor_grid, supersample_factor)
+
+    for i in range(len(radii)):
+        if i==0:
+            FPM=rings[0]*thicknesses[0]*1e-6
+        else:
+            FPM+=rings[i]*thicknesses[i]*1e-6
+
+    FPM_apodizer=SurfaceApodizer(FPM,n_mask)
+
+    return FPM_apodizer
+
+supersample_factor = 8
+FPM_apodizer = make_FPM_w_rings(radii, cor_grid, supersample_factor, n_mask, expected_heights)
+
+# apply the FPM to the apodized pupil at the F#=69 focal plane (gives the cell below its wf_fpm)
+prop_piaa1_focal = hp.FraunhoferPropagator(piaa_pupil_grid, cor_grid, focal_length=F_number * pupil_diameter)
+wf_fpm = FPM_apodizer.forward(prop_piaa1_focal.forward(wf_apodized))
+
+# quick check of the FPM surface
+hp.imshow_field(FPM_apodizer.surface_sag * 1e6, cmap='inferno', grid_units=1e-6)
+plt.colorbar(label='FPM surface height [um]')
+plt.title('FPM surface (from rings)')
+plt.show()
+
