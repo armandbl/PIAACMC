@@ -67,13 +67,6 @@ def make_fpm_apodizer(radii, thicknesses, grid, refractive_index):
 
 
 def make_synthetic_fpm_map(radii, thicknesses, dims, diameter):
-    """Design FPM height map [um] on a pupil grid with given dimensions.
-
-    ``dims``/``diameter`` are passed to ``hp.make_pupil_grid``, so the returned
-    array has the same pixel count and scale as that grid and is centred on the
-    optical axis.  It follows the image convention (row 0 = +y), like a measured
-    map, and reproduces the surface of :func:`make_fpm_apodizer`.
-    """
     grid = hp.make_pupil_grid(dims, diameter)
     sag = make_fpm_ring_field(radii, thicknesses, grid)
     return sag.reshape(grid.shape)[::-1] * 1e6
